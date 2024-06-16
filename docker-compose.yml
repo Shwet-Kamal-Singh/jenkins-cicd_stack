@@ -1,0 +1,85 @@
+version: '3.8'  # Define the version of the Docker Compose file format
+
+services:  # Define the services to be run
+  jenkins:
+    image: jenkins/jenkins:lts  # Specify the Jenkins image to use
+    container_name: jenkins  # Name the container "jenkins"
+    ports:
+      - "8080:8080"  # Map port 8080 of the host to port 8080 of the container
+      - "50000:50000"  # Map port 50000 of the host to port 50000 of the container
+    volumes:
+      - ./data/jenkins:/var/jenkins_home  # Mount the local directory ./data/jenkins to /var/jenkins_home in the container
+    networks:
+      - cicd-network  # Connect the Jenkins container to the "cicd-network"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080 || exit 1"]  # Command to check if Jenkins is healthy
+      interval: 1m30s  # Time between health checks
+      timeout: 10s  # Time to wait for a health check to succeed
+      retries: 3  # Number of retries before marking the service as unhealthy
+    restart: always  # Always restart the container if it stops
+
+  sonarqube:
+    image: sonarqube:latest  # Specify the SonarQube image to use
+    container_name: sonarqube  # Name the container "sonarqube"
+    ports:
+      - "9000:9000"  # Map port 9000 of the host to port 9000 of the container
+    environment:
+      - SONARQUBE_JDBC_URL=jdbc:postgresql://db:5432/sonarqube  # Set the JDBC URL for SonarQube
+      - SONARQUBE_JDBC_USERNAME=sonar  # Set the JDBC username for SonarQube
+      - SONARQUBE_JDBC_PASSWORD=sonar  # Set the JDBC password for SonarQube
+    volumes:
+      - ./data/sonarqube/data:/opt/sonarqube/data  # Mount the local directory ./data/sonarqube/data to /opt/sonarqube/data in the container
+      - ./data/sonarqube/logs:/opt/sonarqube/logs  # Mount the local directory ./data/sonarqube/logs to /opt/sonarqube/logs in the container
+      - ./data/sonarqube/extensions:/opt/sonarqube/extensions  # Mount the local directory ./data/sonarqube/extensions to /opt/sonarqube/extensions in the container
+    networks:
+      - cicd-network  # Connect the SonarQube container to the "cicd-network"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000 || exit 1"]  # Command to check if SonarQube is healthy
+      interval: 1m30s  # Time between health checks
+      timeout: 10s  # Time to wait for a health check to succeed
+      retries: 3  # Number of retries before marking the service as unhealthy
+    restart: always  # Always restart the container if it stops
+
+  db:
+    image: postgres:13-alpine  # Specify the PostgreSQL image to use
+    container_name: sonarqube-db  # Name the container "sonarqube-db"
+    environment:
+      POSTGRES_USER: sonar  # Set the PostgreSQL user to "sonar"
+      POSTGRES_PASSWORD: sonar  # Set the PostgreSQL password to "sonar"
+      POSTGRES_DB: sonarqube  # Set the PostgreSQL database to "sonarqube"
+    volumes:
+      - db_data:/var/lib/postgresql/data  # Mount the named volume "db_data" to /var/lib/postgresql/data in the container
+    networks:
+      - cicd-network  # Connect the PostgreSQL container to the "cicd-network"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar"]  # Command to check if PostgreSQL is healthy
+      interval: 1m  # Time between health checks
+      timeout: 10s  # Time to wait for a health check to succeed
+      retries: 5  # Number of retries before marking the service as unhealthy
+    restart: always  # Always restart the container if it stops
+
+  nginx:
+    image: nginx:alpine  # Specify the NGINX image to use
+    container_name: nginx  # Name the container "nginx"
+    ports:
+      - "80:80"  # Map port 80 of the host to port 80 of the container
+      - "443:443"  # Map port 443 of the host to port 443 of the container
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf  # Mount the local file ./nginx/nginx.conf to /etc/nginx/nginx.conf in the container
+      - ./nginx/jenkins.conf:/etc/nginx/conf.d/jenkins.conf  # Mount the local file ./nginx/jenkins.conf to /etc/nginx/conf.d/jenkins.conf in the container
+      - ./nginx/sonarqube.conf:/etc/nginx/conf.d/sonarqube.conf  # Mount the local file ./nginx/sonarqube.conf to /etc/nginx/conf.d/sonarqube.conf in the container
+      - ./certs:/etc/nginx/certs  # Mount the local directory ./certs to /etc/nginx/certs in the container
+    networks:
+      - cicd-network  # Connect the NGINX container to the "cicd-network"
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t"]  # Command to check if NGINX is healthy
+      interval: 1m  # Time between health checks
+      timeout: 10s  # Time to wait for a health check to succeed
+      retries: 3  # Number of retries before marking the service as unhealthy
+    restart: always  # Always restart the container if it stops
+
+networks:
+  cicd-network:  # Define the "cicd-network" network
+
+volumes:
+  db_data:  # Define the "db_data" named volume
